@@ -1,5 +1,7 @@
 package com.gpac.Osmo4;
 
+import java.lang.Math;
+
 import android.content.Context;
 import android.util.Log;
 
@@ -24,16 +26,19 @@ public class SensorServices implements SensorEventListener, GPACInstanceInterfac
 
     protected  Osmo4Renderer rend;
 
-	private float[] lastAcc = {0.0f, 0.0f, 0.0f}, prevAcc;
-	private float[] lastMagn = {0.0f, 0.0f, 0.0f}, prevMagn;
+	 float[] lastAcc = {0.0f, 0.0f, 0.0f}, prevAcc;
+	 float[] lastMagn = {0.0f, 0.0f, 0.0f}, prevMagn;
+	 float[] lastOr = {0.0f, 0.0f, 0.0f}, prevOr;
 
     private float rotation[] = new float[9];
     private float identity[] = new float[9];
 
+
     private static final String LOG_TAG = "GPAC SensorServices";
+    private static final String LOG_TAG_C4 = "GPAC SensorServices C4";
 
     //the lower the value, the more smoothing is applied (lower response) - set to 1.0 for no filter
-    private static final float filterLevel = 0.2f;
+    private static final float filterLevel = 0.05f;
 
     /**
      * Constructor (initialize sensors)
@@ -71,12 +76,12 @@ public class SensorServices implements SensorEventListener, GPACInstanceInterfac
 
         switch(event.sensor.getType()){
             case Sensor.TYPE_ACCELEROMETER:
-                lastAcc = event.values;
-                prevAcc = smoothSensorMeasurement(lastAcc, prevAcc);
+                prevAcc = event.values;
+
                 break;
             case Sensor.TYPE_MAGNETIC_FIELD:
-                lastMagn = event.values;
-                prevMagn = smoothSensorMeasurement(lastMagn, prevMagn);
+                prevMagn = event.values;
+
                 break;
             default:
                 return;
@@ -96,9 +101,15 @@ public class SensorServices implements SensorEventListener, GPACInstanceInterfac
             float orientation[] = new float[3];
             SensorManager.getOrientation(rotation, orientation);
             Log.v(LOG_TAG, "We have orientation: "+orientation[0]+" ,  "+orientation[1]+" ,  "+orientation[2]);
+		lastOr = orientation;
+		prevOr = lowPass(lastOr, prevOr);
+
+		if (prevOr != null && lastOr != null){
+		Log.d(LOG_TAG_C4, "brut : prevOr[0] = " + prevOr[0] + " _ prevOr[1] = " + prevOr[1] + " _ prevOr[2] = " + prevOr[2]);}
+		Log.d(LOG_TAG_C4, "________________________________________________________________________________________________________________");
 
             //NOTE: we invert yaw and roll (for 360 navigation)
-            rend.getInstance().onOrientationChange(- orientation[0], orientation[1], - orientation[2]);
+            rend.getInstance().onOrientationChange(- prevOr[0], prevOr[1], - prevOr[2]);
 
         }
 
@@ -114,6 +125,29 @@ public class SensorServices implements SensorEventListener, GPACInstanceInterfac
 
         return out;
     }
+
+	private float[] lowPass(float[] input, float[] output) {
+		if (output == null){ 
+			//Log.d(LOG_TAG_C4, "lowpass : output == null");
+			return input;
+			}
+		float[] out = {0.0f, 0.0f, 0.0f};
+		for (int i = 0; i < input.length; i++) {
+			if (i==0){
+				if (input[i]*output[i]<0 && (input[i]>2.8f || input[i]<-0.5f) )
+					//out[i] = (-1) * (output[i] + filterLevel * ((-1) * input[i] - output[i]));
+					out[i] = input[i];
+				else
+					out[i] = output[i] + filterLevel * (input[i] - output[i]);
+			}
+			else 
+				out[i] = output[i] + filterLevel * (input[i] - output[i]);
+			}
+		//Log.d(LOG_TAG_C4, "input.length = " + input.length);
+		//Log.d(LOG_TAG_C4, "lowPass : out[0] = " + out[0] + " _ out[1] = " + out[1] + " _ out[2] = " + out[2] );
+
+		return out;
+	}
 
 
     @Override
